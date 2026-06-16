@@ -1176,11 +1176,13 @@ function fetchTrendingThisWeek() {
       data.results.slice(0, 10).forEach(movie => {
         const card = document.createElement('div');
         card.className = 'movie-card trending-card';
+        card.style.position = 'relative';
         card.innerHTML = `
           <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" alt="${movie.title}">
           <h3>${movie.title}</h3>
         `;
         card.addEventListener('click', () => showMovieDetails(movie.id));
+        addFavoriteFunctionality(card, movie.id, movie.title, movie.poster_path);
         container.appendChild(card);
       });
     })
@@ -1361,15 +1363,52 @@ function displayPlaceholderPersonDetails(personName) {
   `;
   document.getElementById('movie-details').style.backgroundImage = 'linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.85))';
 }
+// ===== FAVORITES WITH BACKEND =====
+async function toggleFavorite(movieId, title, posterPath) {
+  if (!authToken) {
+    loginModal.style.display = 'block';
+    return false;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/favorites/toggle`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ movieId, title, poster_path: posterPath })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      showToast(data.message || 'Favorite updated');
+      return true;
+    } else {
+      showToast('Failed to update favorite');
+      return false;
+    }
+  } catch (err) {
+    showToast('Failed to update favorite');
+    return false;
+  }
+}
+
+// Load favorites when needed
+async function loadFavoritesFromBackend() {
+  if (!authToken) return [];
+  try {
+    const res = await fetch(`${API_BASE}/favorites`, {
+      headers: getHeaders()
+    });
+    const data = await res.json();
+    return data.favorites || [];
+  } catch (err) {
+    console.error('Error loading favorites:', err);
+    return [];
+  }
+}
+
 function addFavoriteFunctionality(movieCard, movieId, movieTitle, posterPath) {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
   const favButton = document.createElement('button');
   favButton.className = 'favorite-btn';
-  let isFavorite = false;
-  if (currentUser && currentUser.favorites) {
-    isFavorite = currentUser.favorites.some(fav => fav.id === movieId);
-  }
-  favButton.innerHTML = isFavorite ? '❤️' : '🤍';
   favButton.style.position = 'absolute';
   favButton.style.top = '10px';
   favButton.style.right = '10px';
@@ -1378,97 +1417,85 @@ function addFavoriteFunctionality(movieCard, movieId, movieTitle, posterPath) {
   favButton.style.borderRadius = '50%';
   favButton.style.padding = '8px';
   favButton.style.cursor = 'pointer';
-  favButton.addEventListener('click', (e) => {
+  favButton.innerHTML = '🤍';
+
+  async function checkIfFavorited() {
+    if (authToken) {
+      const favorites = await loadFavoritesFromBackend();
+      const isFav = favorites.some(f => f.movieId === movieId);
+      favButton.innerHTML = isFav ? '❤️' : '🤍';
+    }
+  }
+
+  checkIfFavorited();
+
+  favButton.addEventListener('click', async (e) => {
     e.stopPropagation();
- 
-    if (!currentUser) {
-   
+    if (!authToken) {
       loginModal.style.display = 'block';
       return;
     }
- 
-    toggleFavorite(movieId, movieTitle, posterPath);
-    isFavorite = !isFavorite;
-    favButton.innerHTML = isFavorite ? '❤️' : '🤍';
+    const success = await toggleFavorite(movieId, movieTitle, posterPath);
+    if (success) {
+      await checkIfFavorited();
+    }
   });
+
   movieCard.appendChild(favButton);
 }
-function toggleFavorite(movieId, movieTitle, posterPath) {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-  if (!currentUser) return;
-  let users = JSON.parse(localStorage.getItem('users')) || [];
-  const userIndex = users.findIndex(user => user.id === currentUser.id);
-  if (userIndex === -1) return;
-  const favIndex = currentUser.favorites.findIndex(fav => fav.id === movieId);
-  if (favIndex !== -1) {
- 
-    currentUser.favorites.splice(favIndex, 1);
-  } else {
- 
-    currentUser.favorites.push({
-      id: movieId,
-      title: movieTitle,
-      poster_path: posterPath,
-      dateAdded: new Date().toISOString()
-    });
-  }
-  localStorage.setItem('currentUser', JSON.stringify(currentUser));
-  users[userIndex] = currentUser;
-  localStorage.setItem('users', JSON.stringify(users));
-  showToast(favIndex !== -1 ? 'Removed from favorites' : 'Added to favorites');
-}
 function displayFavoritesPage() {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-  if (!currentUser) {
- 
+  if (!authToken || !currentUser) {
     loginModal.style.display = 'block';
     return;
   }
+
   document.getElementById('main-content').style.display = 'none';
   document.getElementById('search-results-page').style.display = 'none';
   document.getElementById('movie-details').style.display = 'none';
   document.getElementById('favorites-page').style.display = 'block';
   const container = document.getElementById('favorites-container');
   container.innerHTML = '<h2>My Favorites</h2>';
-  if (!currentUser.favorites || currentUser.favorites.length === 0) {
-    container.innerHTML += '<p>You haven\'t added any favorites yet.</p>';
-    return;
-  }
-  const moviesGrid = document.createElement('div');
-  moviesGrid.className = 'movies-grid';
-  currentUser.favorites.forEach(movie => {
-    const card = document.createElement('div');
-    card.className = 'movie-card';
- 
-    const posterUrl = movie.poster_path.startsWith('http')
-      ? movie.poster_path
-      : `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
- 
-    card.innerHTML = `
-      <div class="fav-card-actions">
-        <button class="remove-fav" data-id="${movie.id}">×</button>
-      </div>
-      <img src="${posterUrl}" alt="${movie.title}">
-      <h3>${movie.title}</h3>
-      <p>Added on: ${new Date(movie.dateAdded).toLocaleDateString()}</p>
-    `;
- 
-    card.querySelector('img').addEventListener('click', () => showMovieDetails(movie.id));
-    card.querySelector('.remove-fav').addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleFavorite(movie.id);
-      displayFavoritesPage();
+
+  loadFavoritesFromBackend().then(favorites => {
+    if (!favorites || favorites.length === 0) {
+      container.innerHTML += '<p>You haven\'t added any favorites yet.</p>';
+      return;
+    }
+
+    const moviesGrid = document.createElement('div');
+    moviesGrid.className = 'movies-grid';
+    favorites.forEach(movie => {
+      const card = document.createElement('div');
+      card.className = 'movie-card';
+      const posterUrl = movie.poster_path.startsWith('http')
+        ? movie.poster_path
+        : `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
+
+      card.innerHTML = `
+        <div class="fav-card-actions">
+          <button class="remove-fav" data-id="${movie.movieId}">×</button>
+        </div>
+        <img src="${posterUrl}" alt="${movie.title}">
+        <h3>${movie.title}</h3>
+        <p>Added on: ${new Date(movie.addedAt).toLocaleDateString()}</p>
+      `;
+
+      card.querySelector('img').addEventListener('click', () => showMovieDetails(movie.movieId));
+      card.querySelector('.remove-fav').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await toggleFavorite(movie.movieId, movie.title, movie.poster_path);
+        displayFavoritesPage();
+      });
+
+      moviesGrid.appendChild(card);
     });
- 
-    moviesGrid.appendChild(card);
+    container.appendChild(moviesGrid);
   });
-  container.appendChild(moviesGrid);
 }
 if (!localStorage.getItem('reviews')) {
   localStorage.setItem('reviews', JSON.stringify({}));
 }
 function addRatingAndReviewSection(movie, movieId) {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
   const reviews = JSON.parse(localStorage.getItem('reviews')) || {};
   const movieReviews = reviews[movieId] || [];
   let averageRating = 0;
@@ -1491,9 +1518,9 @@ function addRatingAndReviewSection(movie, movieId) {
     </div>
   `;
   let reviewFormHTML = '';
-  if (currentUser) {
+  if (currentUser && authToken) {
     const userReview = movieReviews.find(review => review.userId === currentUser.id);
- 
+
     reviewFormHTML = `
       <div class="review-form">
         <h3>${userReview ? 'Edit Your Review' : 'Add Your Review'}</h3>
@@ -1518,20 +1545,19 @@ function addRatingAndReviewSection(movie, movieId) {
     `;
   }
   let reviewsListHTML = '';
-  if (currentUser && movieReviews.length > 0) {
+  if (movieReviews.length > 0) {
     reviewsListHTML = `
       <div class="reviews-list">
         <h3>User Reviews (${movieReviews.length})</h3>
         <div class="reviews-container">
           ${movieReviews.map(review => {
-         
-            const users = JSON.parse(localStorage.getItem('users')) || [];
-            const reviewer = users.find(user => user.id === review.userId) || {name: 'Unknown User'};
-         
+
+            const reviewerName = review.userName || 'Anonymous User';
+
             return `
               <div class="review">
                 <div class="review-header">
-                  <span class="reviewer-name">${reviewer.name}</span>
+                  <span class="reviewer-name">${reviewerName}</span>
                   <span class="review-rating">
                     ${'★'.repeat(review.rating)}${'☆'.repeat(5-review.rating)}
                   </span>
@@ -1542,13 +1568,6 @@ function addRatingAndReviewSection(movie, movieId) {
             `;
           }).join('')}
         </div>
-      </div>
-    `;
-  } else if (!currentUser && movieReviews.length > 0) {
-    reviewsListHTML = `
-      <div class="reviews-list">
-        <h3>User Reviews (${movieReviews.length})</h3>
-        <p>Please <a href="#" id="see-reviews-login-link">login</a> to see reviews.</p>
       </div>
     `;
   }
@@ -1562,45 +1581,39 @@ function addRatingAndReviewSection(movie, movieId) {
   `;
 }
 function setupReviewFunctionality(movieId) {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+  const reviews = JSON.parse(localStorage.getItem('reviews')) || {};
+  const movieReviews = reviews[movieId] || [];
+  const userReview = currentUser && movieReviews.find(review => review.userId === currentUser.id);
+
   const stars = document.querySelectorAll('.star');
-  let selectedRating = 0;
+  let selectedRating = userReview ? userReview.rating : 0;
+
   stars.forEach(star => {
-    const reviews = JSON.parse(localStorage.getItem('reviews')) || {};
-    const movieReviews = reviews[movieId] || [];
-    const userReview = currentUser && movieReviews.find(review => review.userId === currentUser.id);
- 
-    if (userReview) {
-      if (parseInt(star.dataset.rating) <= userReview.rating) {
-        star.textContent = '★';
-        selectedRating = userReview.rating;
-      }
+    if (userReview && parseInt(star.dataset.rating) <= userReview.rating) {
+      star.textContent = '★';
     }
- 
+
     star.addEventListener('click', () => {
       selectedRating = parseInt(star.dataset.rating);
-   
-   
       stars.forEach(s => {
         s.textContent = parseInt(s.dataset.rating) <= selectedRating ? '★' : '☆';
       });
-   
       document.querySelector('.rating-value').textContent = `${selectedRating}/5`;
     });
- 
- 
+
     star.addEventListener('mouseover', () => {
       stars.forEach(s => {
         s.textContent = parseInt(s.dataset.rating) <= parseInt(star.dataset.rating) ? '★' : '☆';
       });
     });
- 
+
     star.addEventListener('mouseout', () => {
       stars.forEach(s => {
         s.textContent = parseInt(s.dataset.rating) <= selectedRating ? '★' : '☆';
       });
     });
   });
+
   const reviewLoginLink = document.getElementById('review-login-link');
   if (reviewLoginLink) {
     reviewLoginLink.addEventListener('click', (e) => {
@@ -1608,6 +1621,7 @@ function setupReviewFunctionality(movieId) {
       loginModal.style.display = 'block';
     });
   }
+
   const seeReviewsLoginLink = document.getElementById('see-reviews-login-link');
   if (seeReviewsLoginLink) {
     seeReviewsLoginLink.addEventListener('click', (e) => {
@@ -1615,6 +1629,7 @@ function setupReviewFunctionality(movieId) {
       loginModal.style.display = 'block';
     });
   }
+
   const submitButton = document.getElementById('submit-review');
   if (submitButton) {
     submitButton.addEventListener('click', () => {
@@ -1622,19 +1637,19 @@ function setupReviewFunctionality(movieId) {
         showToast('Please select a rating');
         return;
       }
-   
+
       const reviewText = document.getElementById('review-text').value.trim();
       if (!reviewText) {
         showToast('Please write a review');
         return;
       }
-   
+
       saveReview(movieId, selectedRating, reviewText);
       showToast('Review submitted successfully');
-   
       showMovieDetails(movieId);
     });
   }
+
   const deleteButton = document.getElementById('delete-review');
   if (deleteButton) {
     deleteButton.addEventListener('click', () => {
@@ -1644,8 +1659,8 @@ function setupReviewFunctionality(movieId) {
     });
   }
 }
+
 function saveReview(movieId, rating, text) {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
   if (!currentUser) return;
   const reviews = JSON.parse(localStorage.getItem('reviews')) || {};
   if (!reviews[movieId]) {
@@ -1654,21 +1669,20 @@ function saveReview(movieId, rating, text) {
   const reviewIndex = reviews[movieId].findIndex(review => review.userId === currentUser.id);
   const reviewData = {
     userId: currentUser.id,
+    userName: currentUser.name,
     rating: rating,
     text: text,
     date: new Date().toISOString()
   };
   if (reviewIndex !== -1) {
- 
     reviews[movieId][reviewIndex] = reviewData;
   } else {
- 
     reviews[movieId].push(reviewData);
   }
   localStorage.setItem('reviews', JSON.stringify(reviews));
 }
+
 function deleteReview(movieId) {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
   if (!currentUser) return;
   const reviews = JSON.parse(localStorage.getItem('reviews')) || {};
   if (reviews[movieId]) {
@@ -1827,11 +1841,13 @@ function fetchHorrorMovies() {
         if (movie.poster_path) {
           const card = document.createElement('div');
           card.classList.add('movie-card');
+          card.style.position = 'relative';
           card.innerHTML = `
             <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" alt="${movie.title}">
             <h3>${movie.title}</h3>
           `;
           card.addEventListener('click', () => showMovieDetails(movie.id));
+          addFavoriteFunctionality(card, movie.id, movie.title, movie.poster_path);
           container.appendChild(card);
         }
       });
@@ -1843,11 +1859,13 @@ function fetchHorrorMovies() {
         if (movie.poster_path) {
           const card = document.createElement('div');
           card.classList.add('movie-card');
+          card.style.position = 'relative';
           card.innerHTML = `
             <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" alt="${movie.title}">
             <h3>${movie.title}</h3>
           `;
           card.addEventListener('click', () => showMovieDetails(movie.id));
+          addFavoriteFunctionality(card, movie.id, movie.title, movie.poster_path);
           container.appendChild(card);
         }
       });
@@ -1890,20 +1908,22 @@ function displayCombinedSearchResults(movies, people) {
     container.appendChild(movieSection);
     const movieContainer = document.createElement('div');
     movieContainer.classList.add('category-container');
- 
+
     movies.forEach(movie => {
       if (movie.poster_path) {
         const card = document.createElement('div');
         card.classList.add('movie-card');
+        card.style.position = 'relative';
         card.innerHTML = `
           <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" alt="${movie.title}">
           <h3>${movie.title}</h3>
         `;
         card.addEventListener('click', () => showMovieDetails(movie.id));
+        addFavoriteFunctionality(card, movie.id, movie.title, movie.poster_path);
         movieContainer.appendChild(card);
       }
     });
- 
+
     container.appendChild(movieContainer);
   }
   if (people.length > 0) {
@@ -2213,45 +2233,155 @@ function showToast(message, duration = 3000) {
       document.getElementById('details-back-button').addEventListener('click', backToHome);
     });
  
+// ===== BACKEND API BASE URL =====
+const API_BASE = 'http://localhost:5000/api';
+
+// ===== AUTH SYSTEM (Real Backend) =====
+let currentUser = null;
+let authToken = null;
+
 const loginModal = document.getElementById('login-modal');
 const signupModal = document.getElementById('signup-modal');
 const loginButton = document.getElementById('login-button');
-const signupButton = document.getElementById('signup-button');
 const userProfile = document.getElementById('user-profile');
 const userAvatar = document.getElementById('user-avatar');
 const username = document.getElementById('username');
 const userDropdown = document.getElementById('user-dropdown');
 const logoutLink = document.getElementById('logout-link');
-const authButtons = document.getElementById('auth-buttons');
 const showSignup = document.getElementById('show-signup');
 const showLogin = document.getElementById('show-login');
 const closeBtns = document.getElementsByClassName('close-btn');
 const loginForm = document.getElementById('login-form');
 const signupForm = document.getElementById('signup-form');
+
+function getHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': authToken ? `Bearer ${authToken}` : ''
+  };
+}
+
 function checkAuthStatus() {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-  if (currentUser) {
-    authButtons.style.display = 'none';
+  const token = localStorage.getItem('token');
+  if (token) {
+    authToken = token;
+    currentUser = JSON.parse(localStorage.getItem('user'));
     userProfile.style.display = 'flex';
     username.textContent = currentUser.name;
     userAvatar.textContent = currentUser.name.charAt(0).toUpperCase();
+    loginButton.style.display = 'none';
   } else {
-    authButtons.style.display = 'block';
     userProfile.style.display = 'none';
+    loginButton.style.display = 'block';
+    authToken = null;
+    currentUser = null;
   }
 }
+
+// Signup
+signupForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  document.querySelectorAll('.validation-error').forEach(el => el.remove());
+
+  const name = document.getElementById('signup-name').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const confirm = document.getElementById('signup-confirm').value;
+
+  if (password !== confirm) {
+    showError('signup-confirm', 'Passwords do not match');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      authToken = data.token;
+      currentUser = data.user;
+      signupModal.style.display = 'none';
+      checkAuthStatus();
+      signupForm.reset();
+      showToast('Account created successfully!');
+    } else {
+      showError('signup-email', data.message || 'Signup failed');
+    }
+  } catch (err) {
+    showError('signup-email', 'Server error. Is backend running?');
+  }
+});
+
+// Login
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  document.querySelectorAll('.validation-error').forEach(el => el.remove());
+
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      authToken = data.token;
+      currentUser = data.user;
+      loginModal.style.display = 'none';
+      checkAuthStatus();
+      loginForm.reset();
+      showToast('Login successful!');
+    } else {
+      showError('login-email', data.message || 'Invalid credentials');
+    }
+  } catch (err) {
+    showError('login-email', 'Server error. Make sure backend is running.');
+  }
+});
+
+function showError(fieldId, message) {
+  const field = document.getElementById(fieldId);
+  const err = document.createElement('div');
+  err.className = 'validation-error';
+  err.textContent = message;
+  field.parentNode.appendChild(err);
+}
+
+// Logout
+logoutLink.addEventListener('click', (e) => {
+  e.preventDefault();
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  authToken = null;
+  currentUser = null;
+  checkAuthStatus();
+  showToast('Logged out successfully');
+});
+
+// Modal controls
 loginButton.addEventListener('click', () => {
   loginModal.style.display = 'block';
 });
-signupButton.addEventListener('click', () => {
-  signupModal.style.display = 'block';
-});
+
 for (let i = 0; i < closeBtns.length; i++) {
   closeBtns[i].addEventListener('click', function() {
     loginModal.style.display = 'none';
     signupModal.style.display = 'none';
   });
 }
+
 window.addEventListener('click', (event) => {
   if (event.target === loginModal) {
     loginModal.style.display = 'none';
@@ -2260,19 +2390,23 @@ window.addEventListener('click', (event) => {
     signupModal.style.display = 'none';
   }
 });
+
 showSignup.addEventListener('click', (e) => {
   e.preventDefault();
   loginModal.style.display = 'none';
   signupModal.style.display = 'block';
 });
+
 showLogin.addEventListener('click', (e) => {
   e.preventDefault();
   signupModal.style.display = 'none';
   loginModal.style.display = 'block';
 });
+
 userProfile.addEventListener('click', () => {
   userDropdown.classList.toggle('show');
 });
+
 window.addEventListener('click', (event) => {
   if (!event.target.matches('.user-profile') &&
       !event.target.matches('#username') &&
@@ -2282,83 +2416,17 @@ window.addEventListener('click', (event) => {
     }
   }
 });
-signupForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const name = document.getElementById('signup-name').value;
-  const email = document.getElementById('signup-email').value;
-  const password = document.getElementById('signup-password').value;
-  const confirmPassword = document.getElementById('signup-confirm').value;
-  const errorElements = document.querySelectorAll('.validation-error');
-  errorElements.forEach(element => element.remove());
-  if (password !== confirmPassword) {
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'validation-error';
-    errorDiv.textContent = 'Passwords do not match';
-    document.getElementById('signup-confirm').parentNode.appendChild(errorDiv);
-    return;
-  }
-  let users = JSON.parse(localStorage.getItem('users')) || [];
-  if (users.some(user => user.email === email)) {
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'validation-error';
-    errorDiv.textContent = 'Email already in use';
-    document.getElementById('signup-email').parentNode.appendChild(errorDiv);
-    return;
-  }
-  const newUser = {
-    id: Date.now().toString(),
-    name,
-    email,
-    password,
-    favorites: []
-  };
-  users.push(newUser);
-  localStorage.setItem('users', JSON.stringify(users));
-  localStorage.setItem('currentUser', JSON.stringify(newUser));
-  signupModal.style.display = 'none';
-  checkAuthStatus();
-  signupForm.reset();
-});
-loginForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-password').value;
-  const errorElements = document.querySelectorAll('.validation-error');
-  errorElements.forEach(element => element.remove());
-  const users = JSON.parse(localStorage.getItem('users')) || [];
-  const user = users.find(user => user.email === email && user.password === password);
-  if (user) {
- 
-    localStorage.setItem('currentUser', JSON.stringify(user));
- 
- 
-    loginModal.style.display = 'none';
-    checkAuthStatus();
- 
- 
-    loginForm.reset();
-  } else {
- 
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'validation-error';
-    errorDiv.textContent = 'Invalid email or password';
-    loginForm.appendChild(errorDiv);
-  }
-});
-logoutLink.addEventListener('click', (e) => {
-  e.preventDefault();
-  localStorage.removeItem('currentUser');
-  userDropdown.classList.remove('show');
-  checkAuthStatus();
-});
+
 document.getElementById('favorites-link').addEventListener('click', (e) => {
   e.preventDefault();
-  alert('Favorites feature coming soon!');
+  displayFavoritesPage();
 });
+
 document.getElementById('profile-link').addEventListener('click', (e) => {
   e.preventDefault();
   alert('Profile feature coming soon!');
 });
+
 document.addEventListener('DOMContentLoaded', () => {
   checkAuthStatus();
 });
