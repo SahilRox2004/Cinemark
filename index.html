@@ -895,7 +895,7 @@ textarea#review-text {
     <div class="toplayer"></div>
     CINEMARK
   </div>
-  <div id="intro-instructions" style="position: absolute; bottom: 50px;">Press ENTER to continue</div>
+  <div id="intro-instructions" style="position: absolute; bottom: 50px;">Click on the screen to continue</div>
   <div id="main-content">
    <div class="header">
       <div class="header-left">
@@ -2163,19 +2163,22 @@ function showToast(message, duration = 3000) {
       instructions.style.display = 'block';
    
    
-      document.addEventListener('keydown', function(event) {
-    if (event.key === 'Enter' && intro.style.display !== 'none') {
-      intro.style.transition = 'opacity 1s ease';
-      instructions.style.transition = 'opacity 1s ease';
-      intro.style.opacity = '0';
-      instructions.style.opacity = '0';
-      setTimeout(() => {
-        intro.style.display = 'none';
-        instructions.style.display = 'none';
-        mainContent.style.display = 'block';
-      }, 1000);
-    }
-  });
+      function handleIntroSkip() {
+        if (intro.style.display !== 'none') {
+          intro.style.transition = 'opacity 1s ease';
+          instructions.style.transition = 'opacity 1s ease';
+          intro.style.opacity = '0';
+          instructions.style.opacity = '0';
+          setTimeout(() => {
+            intro.style.display = 'none';
+            instructions.style.display = 'none';
+            mainContent.style.display = 'block';
+          }, 1000);
+        }
+      }
+
+      document.addEventListener('click', handleIntroSkip);
+      document.addEventListener('touchstart', handleIntroSkip);
       fetchHeroBannerMovie();
       fetchHeroMovies();
       fetchTrendingThisWeek();
