@@ -1090,78 +1090,8 @@ textarea#review-text {
 </div>
   <script>
     const apiKey = 'e3f3c6bbaa28f44655ce122808717a76';
-    const API_BASE = 'http://localhost:5000/api';
 
-    // ===== ROUTING =====
-    function navigateTo(hash) {
-      window.location.hash = hash;
-    }
-
-    function updateActiveNav() {
-      const hash = window.location.hash || '#home';
-      document.querySelectorAll('.nav-link').forEach(link => {
-        link.classList.remove('active');
-      });
-
-      if (hash === '#home') {
-        document.getElementById('nav-home').classList.add('active');
-      } else if (hash === '#genres') {
-        document.getElementById('nav-genres').classList.add('active');
-      } else if (hash === '#favorites') {
-        document.getElementById('nav-mylist').classList.add('active');
-      }
-    }
-
-    function handleRoute() {
-      const hash = window.location.hash || '#home';
-      updateActiveNav();
-
-      document.getElementById('main-content').style.display = 'none';
-      document.getElementById('movie-details').style.display = 'none';
-      document.getElementById('search-results-page').style.display = 'none';
-      document.getElementById('favorites-page').style.display = 'none';
-
-      if (hash.startsWith('#movie/')) {
-        const movieId = parseInt(hash.split('/')[1]);
-        loadMovieDetails(movieId);
-      } else if (hash.startsWith('#person/')) {
-        const personId = parseInt(hash.split('/')[1]);
-        const personName = decodeURIComponent(hash.split('/')[2] || 'Person');
-        showPersonDetails(personId, personName);
-      } else if (hash === '#favorites') {
-        displayFavoritesPage();
-      } else if (hash === '#genres') {
-        showGenresPage();
-      } else {
-        document.getElementById('main-content').style.display = 'block';
-      }
-    }
-
-    window.addEventListener('hashchange', handleRoute);
-    window.addEventListener('load', handleRoute);
-
-    function loadMovieDetails(movieId) {
-      fetch(`https://api.themoviedb.org/3/movie/${movieId}?api_key=${apiKey}`)
-        .then(response => response.json())
-        .then(movie => {
-          fetch(`https://api.themoviedb.org/3/movie/${movieId}/credits?api_key=${apiKey}`)
-            .then(response => response.json())
-            .then(credits => {
-              displayMovieDetailsWithCredits(movie, credits);
-            })
-            .catch(error => {
-              console.error('Error fetching movie credits:', error);
-              displayMovieDetailsWithCredits(movie, { cast: [], crew: [] });
-            });
-        })
-        .catch(error => console.error('Error fetching movie details:', error));
-    }
-
-    function showGenresPage() {
-      alert("Genres page coming soon! (Filter by Action, Horror, etc. will be added)");
-      navigateTo('#home');
-    }
-
+    
     async function fetchHeroBannerMovie() {
       try {
         const response = await fetch(
@@ -1196,11 +1126,11 @@ textarea#review-text {
      
       document.getElementById('hero-release').textContent =
         movie.release_date ? new Date(movie.release_date).getFullYear() : 'TBA';
-
+     
       document.getElementById('hero-rating').innerHTML =
         `⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}/10`;
-      document.getElementById('hero-details-btn').onclick = () => navigateTo(`#movie/${movie.id}`);
-
+      document.getElementById('hero-details-btn').onclick = () => showMovieDetails(movie.id);
+     
       document.getElementById('hero-watch-trailer').onclick = () => {
         showToast(`Trailer for "${movie.title}" - Feature coming soon!`);
       };
@@ -1251,7 +1181,7 @@ function fetchTrendingThisWeek() {
           <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" alt="${movie.title}">
           <h3>${movie.title}</h3>
         `;
-        card.addEventListener('click', () => navigateTo(`#movie/${movie.id}`));
+        card.addEventListener('click', () => showMovieDetails(movie.id));
         addFavoriteFunctionality(card, movie.id, movie.title, movie.poster_path);
         container.appendChild(card);
       });
@@ -1287,7 +1217,7 @@ function setupGenrePills() {
             <h3 class="crew-title">You May Also Like</h3>
             <div class="category-carousel">
               ${similarMovies.map(movie => `
-                <div class="movie-card" onclick="navigateTo('#movie/${movie.id}')">
+                <div class="movie-card" onclick="showMovieDetails(${movie.id})">
                   <img src="${movie.poster_path ? `https://image.tmdb.org/t/p/w185${movie.poster_path}` : '/api/placeholder/185/278'}" alt="${movie.title}">
                   <h3>${movie.title}</h3>
                 </div>
@@ -1355,9 +1285,9 @@ function displayPersonDetailsWithFilmography(person, credits) {
             const posterImg = movie.poster_path
               ? `https://image.tmdb.org/t/p/w185${movie.poster_path}`
               : '/api/placeholder/185/278';
-
+         
             return `
-              <div class="movie-card" onclick="navigateTo('#movie/${movie.id}')">
+              <div class="movie-card" onclick="showMovieDetails(${movie.id})">
                 <img src="${posterImg}" alt="${movie.title}">
                 <h3>${movie.title}</h3>
                 <p>${movie.character || 'Unknown Role'} (${movie.release_date ? movie.release_date.split('-')[0] : 'TBA'})</p>
@@ -1377,9 +1307,9 @@ function displayPersonDetailsWithFilmography(person, credits) {
             const posterImg = movie.poster_path
               ? `https://image.tmdb.org/t/p/w185${movie.poster_path}`
               : '/api/placeholder/185/278';
-
+         
             return `
-              <div class="movie-card" onclick="navigateTo('#movie/${movie.id}')">
+              <div class="movie-card" onclick="showMovieDetails(${movie.id})">
                 <img src="${posterImg}" alt="${movie.title}">
                 <h3>${movie.title}</h3>
                 <p>Director (${movie.release_date ? movie.release_date.split('-')[0] : 'TBA'})</p>
@@ -1550,7 +1480,7 @@ function displayFavoritesPage() {
         <p>Added on: ${new Date(movie.addedAt).toLocaleDateString()}</p>
       `;
 
-      card.querySelector('img').addEventListener('click', () => navigateTo(`#movie/${movie.movieId}`));
+      card.querySelector('img').addEventListener('click', () => showMovieDetails(movie.movieId));
       card.querySelector('.remove-fav').addEventListener('click', async (e) => {
         e.stopPropagation();
         await toggleFavorite(movie.movieId, movie.title, movie.poster_path);
@@ -1762,7 +1692,7 @@ function deleteReview(movieId) {
 }
 document.getElementById('favorites-link').addEventListener('click', (e) => {
   e.preventDefault();
-  navigateTo('#favorites');
+  displayFavoritesPage();
 });
 document.getElementById('favorites-back-button').addEventListener('click', backToHome);
  
@@ -1916,7 +1846,7 @@ function fetchHorrorMovies() {
             <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" alt="${movie.title}">
             <h3>${movie.title}</h3>
           `;
-          card.addEventListener('click', () => navigateTo(`#movie/${movie.id}`));
+          card.addEventListener('click', () => showMovieDetails(movie.id));
           addFavoriteFunctionality(card, movie.id, movie.title, movie.poster_path);
           container.appendChild(card);
         }
@@ -1934,7 +1864,7 @@ function fetchHorrorMovies() {
             <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" alt="${movie.title}">
             <h3>${movie.title}</h3>
           `;
-          card.addEventListener('click', () => navigateTo(`#movie/${movie.id}`));
+          card.addEventListener('click', () => showMovieDetails(movie.id));
           addFavoriteFunctionality(card, movie.id, movie.title, movie.poster_path);
           container.appendChild(card);
         }
@@ -1988,7 +1918,7 @@ function displayCombinedSearchResults(movies, people) {
           <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}" alt="${movie.title}">
           <h3>${movie.title}</h3>
         `;
-        card.addEventListener('click', () => navigateTo(`#movie/${movie.id}`));
+        card.addEventListener('click', () => showMovieDetails(movie.id));
         addFavoriteFunctionality(card, movie.id, movie.title, movie.poster_path);
         movieContainer.appendChild(card);
       }
@@ -2012,22 +1942,37 @@ function displayCombinedSearchResults(movies, people) {
       const profileImg = person.profile_path
         ? `https://image.tmdb.org/t/p/w185${person.profile_path}`
         : '/api/placeholder/150/150';
-
+   
       card.innerHTML = `
         <img src="${profileImg}" alt="${person.name}">
         <p class="cast-name">${person.name}</p>
         <p class="cast-character">${person.known_for_department || 'Actor'}</p>
       `;
-      card.addEventListener('click', () => navigateTo(`#person/${person.id}/${encodeURIComponent(person.name)}`));
+      card.addEventListener('click', () => showPersonDetails(person.id, person.name));
       peopleContainer.appendChild(card);
     });
  
     container.appendChild(peopleContainer);
   }
 }
-
+ 
     function showMovieDetails(movieId) {
-      navigateTo(`#movie/${movieId}`);
+   
+      fetch(`https://api.themoviedb.org/3/movie/${movieId}?api_key=${apiKey}`)
+        .then(response => response.json())
+        .then(movie => {
+     
+          fetch(`https://api.themoviedb.org/3/movie/${movieId}/credits?api_key=${apiKey}`)
+            .then(response => response.json())
+            .then(credits => {
+              displayMovieDetailsWithCredits(movie, credits);
+            })
+            .catch(error => {
+              console.error('Error fetching movie credits:', error);
+              displayMovieDetailsWithCredits(movie, { cast: [], crew: [] });
+            });
+        })
+        .catch(error => console.error('Error fetching movie details:', error));
     }
  
     function showPlaceholderMovieDetails(movie) {
@@ -2118,7 +2063,7 @@ function displayCombinedSearchResults(movies, people) {
             ? `https://image.tmdb.org/t/p/w185${director.profile_path}`
             : '/api/placeholder/150/150';
           return `
-            <div class="crew-member" onclick="navigateTo('#person/${director.id}/${encodeURIComponent(\'${director.name.replace(/'/g, "\\'")}\')}')" style="cursor: pointer;">
+            <div class="crew-member" onclick="showPersonDetails(${director.id}, '${director.name.replace(/'/g, "\\'")}')" style="cursor: pointer;">
               <img src="${profileImg}" alt="${director.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 50%;">
               <div class="crew-info">
                 <p class="crew-name">${director.name}</p>
@@ -2142,7 +2087,7 @@ function displayCombinedSearchResults(movies, people) {
               ? `https://image.tmdb.org/t/p/w185${actor.profile_path}`
               : '/api/placeholder/150/150';
             return `
-              <div class="cast-member" onclick="navigateTo('#person/${actor.id}/${encodeURIComponent(\'${actor.name.replace(/'/g, "\\'")}\')}')" style="cursor: pointer;">
+              <div class="cast-member" onclick="showPersonDetails(${actor.id}, '${actor.name.replace(/'/g, "\\'")}')" style="cursor: pointer;">
                 <img src="${profileImg}" alt="${actor.name}">
                 <p class="cast-name">${actor.name}</p>
                 <p class="cast-character">${actor.character || 'Unknown Role'}</p>
@@ -2165,20 +2110,19 @@ function displayCombinedSearchResults(movies, people) {
         <p><strong>Release Date:</strong> ${movie.release_date || 'TBA'}</p>
         
         <!-- Rating Meter -->
-        <div style="margin: 25px 0 30px 0;">
-          <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
-            <strong style="font-size: 1.1rem;">TMDB Rating:</strong>
-            <span style="font-size: 1.6rem; font-weight: bold;">${rating}/10</span>
-          </div>
-          
-          <div style="background: #333; height: 14px; border-radius: 9999px; overflow: hidden; margin-bottom: 8px;">
-            <div style="width: ${meterWidth}%; height: 100%; background: ${meterColor}; transition: width 1s ease;"></div>
-          </div>
-          
-          <div style="font-size: 1.25rem; font-weight: 700; color: ${meterColor};">
-            ${ratingLabel}
-          </div>
-        </div>
+       <div style="margin: 25px 0 30px 0;">
+  <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+    <span style="font-size: 1.6rem; font-weight: bold;">${rating}/10</span>
+  </div>
+  
+  <div style="background: #333; height: 14px; border-radius: 9999px; overflow: hidden; margin-bottom: 8px;">
+    <div style="width: ${meterWidth}%; height: 100%; background: ${meterColor}; transition: width 1s ease;"></div>
+  </div>
+  
+  <div style="font-size: 1.25rem; font-weight: 700; color: ${meterColor};">
+    ${ratingLabel}
+  </div>
+</div>
 
         <p>${movie.overview || 'No overview available.'}</p>
         ${directorsHTML}
@@ -2224,8 +2168,10 @@ function showToast(message, duration = 3000) {
 }
  
  
-function backToHome() {
-      navigateTo('#home');
+    function backToHome() {
+      document.getElementById('main-content').style.display = 'block';
+      document.getElementById('movie-details').style.display = 'none';
+      document.getElementById('search-results-page').style.display = 'none';
     }
  
     document.addEventListener('DOMContentLoaded', () => {
@@ -2284,28 +2230,10 @@ function backToHome() {
    
       document.getElementById('back-button').addEventListener('click', backToHome);
       document.getElementById('details-back-button').addEventListener('click', backToHome);
-
-      // Wire up nav links
-      document.getElementById('nav-home').addEventListener('click', (e) => {
-        e.preventDefault();
-        navigateTo('#home');
-      });
-      document.getElementById('nav-movies').addEventListener('click', (e) => {
-        e.preventDefault();
-        navigateTo('#home');
-      });
-      document.getElementById('nav-genres').addEventListener('click', (e) => {
-        e.preventDefault();
-        navigateTo('#genres');
-      });
-      document.getElementById('nav-mylist').addEventListener('click', (e) => {
-        e.preventDefault();
-        navigateTo('#favorites');
-      });
     });
  
 // ===== BACKEND API BASE URL =====
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'https://cinemark-ln3e.onrender.com/api';
 
 // ===== AUTH SYSTEM (Real Backend) =====
 let currentUser = null;
